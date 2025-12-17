@@ -3,54 +3,40 @@ import formidable from "formidable";
 import fs from "fs";
 
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false },
 };
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Preflight
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "POST") {
+  if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-  }
 
   const form = formidable();
 
   form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error("Form parse error:", err);
-      return res.status(500).json({
-        error: "Form parse error",
-        details: err.message || String(err),
-      });
-    }
+    if (err) return res.status(500).json({ error: err.message });
 
     const file = files?.file?.[0];
-    if (!file) {
-      return res.status(400).json({
-        error: "No file received",
-      });
-    }
+    if (!file)
+      return res.status(400).json({ error: "No file received" });
 
     try {
-      const auth = new google.auth.GoogleAuth({
-        credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
-        scopes: ["https://www.googleapis.com/auth/drive"],
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+      );
+
+      oauth2Client.setCredentials({
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
       });
 
-      const drive = google.drive({ version: "v3", auth });
+      const drive = google.drive({ version: "v3", auth: oauth2Client });
 
       const response = await drive.files.create({
-        supportsAllDrives: true,
         requestBody: {
           name: file.originalFilename,
           parents: [process.env.DRIVE_FOLDER_ID],
@@ -61,20 +47,15 @@ export default async function handler(req, res) {
         },
       });
 
-
       return res.status(200).json({
         success: true,
         fileId: response.data.id,
       });
     } catch (error) {
-      console.error("Google Drive upload failed:", error);
-
+      console.error("Upload failed:", error);
       return res.status(500).json({
         error: "Upload failed",
-        details:
-          error?.response?.data?.error?.message ||
-          error?.message ||
-          String(error),
+        details: error.message,
       });
     }
   });
