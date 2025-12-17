@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Respond to preflight
+  // Preflight
   if (req.method === "OPTIONS") {
     return res.status(204).end();
   }
@@ -27,10 +27,19 @@ export default async function handler(req, res) {
 
   form.parse(req, async (err, fields, files) => {
     if (err) {
-      return res.status(500).json({ error: "Form parse error" });
+      console.error("Form parse error:", err);
+      return res.status(500).json({
+        error: "Form parse error",
+        details: err.message || String(err),
+      });
     }
 
-    const file = files.file[0];
+    const file = files?.file?.[0];
+    if (!file) {
+      return res.status(400).json({
+        error: "No file received",
+      });
+    }
 
     try {
       const auth = new google.auth.GoogleAuth({
@@ -46,18 +55,25 @@ export default async function handler(req, res) {
           parents: [process.env.DRIVE_FOLDER_ID],
         },
         media: {
-          mimeType: file.mimetype,
+          mimeType: file.mimetype || "application/octet-stream",
           body: fs.createReadStream(file.filepath),
         },
       });
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         fileId: response.data.id,
       });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Upload failed" });
+      console.error("Google Drive upload failed:", error);
+
+      return res.status(500).json({
+        error: "Upload failed",
+        details:
+          error?.response?.data?.error?.message ||
+          error?.message ||
+          String(error),
+      });
     }
   });
 }
