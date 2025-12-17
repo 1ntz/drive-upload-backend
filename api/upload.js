@@ -50,6 +50,7 @@ export default async function handler(req, res) {
       const drive = google.drive({ version: "v3", auth });
 
       const response = await drive.files.create({
+        supportsAllDrives: true,
         requestBody: {
           name: file.originalFilename,
           parents: [process.env.DRIVE_FOLDER_ID],
@@ -59,6 +60,7 @@ export default async function handler(req, res) {
           body: fs.createReadStream(file.filepath),
         },
       });
+
 
       return res.status(200).json({
         success: true,
