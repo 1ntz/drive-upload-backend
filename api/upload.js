@@ -97,14 +97,14 @@ export default async function handler(req, res) {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: process.env.SHEET_ID,
-        range: process.env.SHEET_RANGE || "Sheet1!A:G",
+        range: "Sheet1!A1",
         valueInputOption: "USER_ENTERED",
         insertDataOption: "INSERT_ROWS",
         requestBody: {
-          // A: uploadedAt, B: filename, C: fileId, D: driveLink, E: track, F: time, G: rkgDate
           values: [[uploadedAt, filename, fileId, driveLink, track, time, rkgDate]],
         },
       });
+
 
       return res.status(200).json({
         success: true,
