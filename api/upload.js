@@ -12,8 +12,9 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(204).end();
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
 
   const form = formidable();
 
@@ -21,8 +22,7 @@ export default async function handler(req, res) {
     if (err) return res.status(500).json({ error: err.message });
 
     const file = files?.file?.[0];
-    if (!file)
-      return res.status(400).json({ error: "No file received" });
+    if (!file) return res.status(400).json({ error: "No file received" });
 
     try {
       const oauth2Client = new google.auth.OAuth2(
@@ -35,8 +35,10 @@ export default async function handler(req, res) {
       });
 
       const drive = google.drive({ version: "v3", auth: oauth2Client });
+      const sheets = google.sheets({ version: "v4", auth: oauth2Client });
 
-      const response = await drive.files.create({
+      // 1) Upload to Drive
+      const driveRes = await drive.files.create({
         requestBody: {
           name: file.originalFilename,
           parents: [process.env.DRIVE_FOLDER_ID],
@@ -47,15 +49,43 @@ export default async function handler(req, res) {
         },
       });
 
+      const fileId = driveRes.data.id;
+      const filename = file.originalFilename || "(unknown)";
+      const uploadedAt = new Date().toISOString();
+      const driveLink = fileId
+        ? `https://drive.google.com/file/d/${fileId}/view`
+        : "";
+
+      // optional form fields (Formidable often returns arrays)
+      const track = Array.isArray(fields.track) ? fields.track[0] : (fields.track ?? "");
+      const time = Array.isArray(fields.time) ? fields.time[0] : (fields.time ?? "");
+
+      // 2) Append a row to Google Sheets
+      if (!process.env.SHEET_ID) {
+        throw new Error("Missing SHEET_ID env var");
+      }
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: process.env.SHEET_ID,
+        range: process.env.SHEET_RANGE || "Sheet1!A:E",
+        valueInputOption: "USER_ENTERED",
+        insertDataOption: "INSERT_ROWS",
+        requestBody: {
+          values: [[uploadedAt, filename, fileId, driveLink, `${track} ${time}`.trim()]],
+        },
+      });
+
       return res.status(200).json({
         success: true,
-        fileId: response.data.id,
+        fileId,
+        filename,
+        driveLink,
       });
     } catch (error) {
       console.error("Upload failed:", error);
       return res.status(500).json({
         error: "Upload failed",
-        details: error.message,
+        details: error?.message || String(error),
       });
     }
   });

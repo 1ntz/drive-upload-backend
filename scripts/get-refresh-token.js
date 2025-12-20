@@ -15,7 +15,10 @@ const CLIENT_ID = cfg.client_id;
 const CLIENT_SECRET = cfg.client_secret;
 
 const REDIRECT_URI = "http://localhost:3000/oauth2callback";
-const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/spreadsheets",
+];
 
 const oauth2Client = new google.auth.OAuth2(
   CLIENT_ID,
@@ -50,10 +53,10 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("Auth complete. Check your terminal for the refresh token.\n");
 
-  console.log("\n✅ TOKENS:");
+  console.log("\n TOKENS:");
   console.log(tokens);
 
-  console.log("\n🔑 Refresh token (store this in Vercel as GOOGLE_REFRESH_TOKEN):");
+  console.log("\n Refresh token (store this in Vercel as GOOGLE_REFRESH_TOKEN):");
   console.log(tokens.refresh_token);
 
   server.close();
