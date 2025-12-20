@@ -6,6 +6,28 @@ export const config = {
   api: { bodyParser: false },
 };
 
+// Decode RKG date from bytes 0x09..0x0B (same bitfield logic as your Python)
+function rkgDateFromBuffer(buf) {
+  if (!buf || buf.length < 0x0c) return "";
+
+  const b9 = buf[0x09];
+  const bA = buf[0x0a];
+  const bB = buf[0x0b];
+
+  const yearRel = ((b9 & 0x0f) << 3) | (bA >> 5); // year-2000 (0..127)
+  const month = (bA >> 1) & 0x0f;                 // 1..12
+  const day = ((bA & 0x01) << 4) | (bB >> 4);     // 1..31
+
+  const year = 2000 + yearRel;
+
+  // sanity check
+  if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  return `${dd}.${mm}.${year}`;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
@@ -37,6 +59,14 @@ export default async function handler(req, res) {
       const drive = google.drive({ version: "v3", auth: oauth2Client });
       const sheets = google.sheets({ version: "v4", auth: oauth2Client });
 
+      // Read bytes to extract RKG date (only meaningful for .rkg)
+      let rkgDate = "";
+      const filenameOriginal = file.originalFilename || "";
+      if (filenameOriginal.toLowerCase().endsWith(".rkg")) {
+        const buf = fs.readFileSync(file.filepath);
+        rkgDate = rkgDateFromBuffer(buf);
+      }
+
       // 1) Upload to Drive
       const driveRes = await drive.files.create({
         requestBody: {
@@ -67,11 +97,12 @@ export default async function handler(req, res) {
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: process.env.SHEET_ID,
-        range: process.env.SHEET_RANGE || "Sheet1!A:E",
+        range: process.env.SHEET_RANGE || "Sheet1!A:G",
         valueInputOption: "USER_ENTERED",
         insertDataOption: "INSERT_ROWS",
         requestBody: {
-          values: [[uploadedAt, filename, fileId, driveLink, `${track} ${time}`.trim()]],
+          // A: uploadedAt, B: filename, C: fileId, D: driveLink, E: track, F: time, G: rkgDate
+          values: [[uploadedAt, filename, fileId, driveLink, track, time, rkgDate]],
         },
       });
 
@@ -80,6 +111,7 @@ export default async function handler(req, res) {
         fileId,
         filename,
         driveLink,
+        rkgDate,
       });
     } catch (error) {
       console.error("Upload failed:", error);
